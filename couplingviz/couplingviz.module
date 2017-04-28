@@ -1,0 +1,343 @@
+<?php 
+
+/**
+ *@file
+ *Integrate Coupling Viz Component to Drupal System 
+ *
+ *Add all necessary backend features to drupal system 
+ *the cproposes component are 
+ * - user authentication
+ * - user authorisation
+ * - processing user queries
+ * - storing user data
+ */
+ 
+ 
+ /**
+ * Implementation of hook_menu()
+ **/
+ function couplingviz_menu(){
+	$items['admin/config/couplingviz'] = array (
+		'title' 		=> 'Coupling Viz Configuration', 
+		'description' 	=> 'Coupling Viz is a visual representation system - set configuration of module',
+		'position' 		=> 'right', 
+		'weight' 		=> -10,
+		'page callback' => 'system_admin_menu_block_page', 
+		'access arguments' => array('administer site configuration'),
+		'file' => 'system.admin.inc',
+		'file path' => drupal_get_path('module', 'system'),
+	);
+	
+	$items['coupling_viz_dynamic'] = array(
+		'title' => t('Coupling Viz Dynamic Form'),
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('couplingviz_dynamic_form'),
+		'access callback' => TRUE,
+		'type' => MENU_NORMAL_ITEM
+	);  
+	
+	$items['couplinghome'] = array(
+		'title' => t('Coupling Viz Dynamic Form'),
+		'page callback' => 'drupal_get_form',
+		'page arguments' => array('couplingviz_metric_form'),
+		'access callback' => TRUE,
+	); 
+	$items['savejsoncoupling'] = array(
+		'title' => t('Save data posted to route in database'),
+		'page callback' => 'save_json_coupling',
+		'access callback' => TRUE,
+	);
+	return $items;
+ }
+ 
+ function couplingviz_form_user_login_block_alter(&$form, &$form_state) {
+	$form['direction'] = array(
+		'#markup' => t('Please log-in or Register to access coupling viz'),
+		'#weight' => -5
+	);
+	 
+	// Change 'Log in' to 'Sign in'.
+	$form['submit']['#value'] = t('Sign in');
+
+	$items[] = l(t('Sign Up'), 'user/register', array('attributes' => array('title' => t('Create a new user account.'))));
+	//$items[] = l(t('Request new password'), 'user/password', array('attributes' => array('title' => t('Request new password via e-mail.'))));
+	$form['links'] = array('#markup' => theme('item_list', array('items' => $items)));
+	$form['#action'] = url($_GET['q'], array('query' => array('destination' => 'couplinghome')));
+ }
+
+ 
+ 
+  function couplingviz_form_user_login_alter(&$form, $form_state, $form_id) {
+	$form['direction'] = array(
+		'#markup' => t('Please log-in or Register to access coupling viz'),
+		'#weight' => -5
+	);
+	
+	/**
+	$form['room_type'] = array(
+		 '#type' => 'radios',
+		 '#options' => drupal_map_assoc(array(t('Study Room'), t('Small Conference Room'),
+		t('Board Room'))),
+		 '#title' => t('What type of room do you require?')
+	);**/
+	
+	array_unshift($form['#validate'], 'couplingviz_form_user_login_validate');
+	$form_state['redirect'] = 'node/1';
+	// Change 'Log in' to 'Sign in'.
+	$form['actions']['submit']['#value'] = t('Sign In');
+	
+  }
+  
+  function couplingviz_form_user_login_validate($form, $form_state){
+	
+	//watchdog("CouplingVizer",'!yeah coupling validate work');
+	 //if ($form_state['values']['room_type'] == 'Study Room') {
+		 // We notify the form API that this field has failed validation.
+		//form_set_error('name', t('We are sorry but u cant chose a %value at the moment', array('%value' => $form_state['values']['room_type'])));
+	 //} 
+  }
+  
+  
+  /**
+ * Implements hook_block_info().
+ */ 
+  function couplingviz_block_info(){
+	$blocks['viz_repo'] = array(
+		 'info' => t('Coupling Viz json file repositry'),
+		 'status' => TRUE,
+		 'region' => 'sidebar_first',
+		 'weight' => 0,
+		 'visibility' => 1, 
+	);
+	$blocks['viz_diplay'] = array(
+		 'info' => t('CouplingViz visual representation display'),
+		 'status' => TRUE,
+		 'region' => 'content',
+		 'weight' => 0,
+		 'visibility' => 1, 
+	);
+	
+	return $blocks;
+  }
+ 
+ /**
+ * Implements hook_block_configure().
+ */
+ function couplingviz_block_configure($delta){
+	
+	$form = array();
+	
+	switch($delta){
+		
+		case 'viz_repo':
+			$form['file_num_count'] = array(
+				 '#type' => 'textfield',
+				 '#title' => t('Configure Number of repository file to show'),
+				 '#size' => 6,
+				 '#description' => t('Enter the number of pending comments that will appear in the block.'),
+				 '#default_value' => variable_get('file_num_count', 5),
+			); 
+		break;		
+		
+	}
+	return $form;
+ } 
+ 
+ /**
+ * Implements hook_block_save().
+ */
+ function couplingviz_block_save($delta = '', $edit = array()) {
+	 switch($delta) {
+	 
+		case 'viz_repo':
+			variable_set('file_num_count', (int)$edit['file_num_count']);
+		break;
+	 }
+	 return;
+ } 
+ 
+ /**
+ * Implements hook_block_view().
+ */
+ function couplingviz_block_view($delta = '') {
+	switch ($delta) {
+		 case 'viz_repo':
+			 $block['subject'] = t('Repository Files');
+			 $block['content'] = couplingviz_block_contents($delta);
+			 return $block;
+		 break;
+		 
+		 case 'viz_diplay':
+			$block['subject'] = t('Visual Represntation');
+			$block['content'] = couplingviz_block_contents($delta);
+			return $block;
+		break;
+	}
+ } 
+ 
+ /**
+ * A module-defined block content function.
+ */
+ function couplingviz_block_contents($delta) {
+	 switch ($delta) {
+		 case 'viz_repo':
+			 if (user_access('administer comments')) {
+				 $nbr_comments = variable_get('file_num_count');
+				 $result = db_query("SELECT cid, subject FROM {comment} WHERE status = 1 limit $nbr_comments");
+				
+				 $items = array();
+				 
+				 foreach ($result as $row) {
+					$items[] = l($row->subject, 'comment/' . $row->cid . '/edit');
+				 }
+			return array('#markup' => theme('item_list', array('items' => $items)));
+			}
+		 break;
+		 case 'viz_diplay':
+			$output = '';
+			$output .= ' <div id="fanin" style="display:none;"> </div>';
+			$output .= ' <div id="fanout" style="display:none;"> </div>';
+			$output .= '<section id="maincontainer">';
+			$output .= '<label for="scaling"> Scale</label> <select id="scaling" onchange="scaleNodes(this.value);">';
+			$output .= '<option value="0">0</option>';
+			$output .= '<option value="1">1</option>';
+			$output .= '<option value="2">2</option>';
+			$output .= '<option value="3">3</option>';
+			$output .= '</select> <label for="links">Links</label> <input type="checkbox" id="links" onclick="displayLines(this);" checked /> <label for="packages">Packages</label>';
+			$output .= '<input type="checkbox" id="packages" onclick="displayPackageBg(this);" checked />';
+			$output .= '<input type="radio" name="coupling" value="fanout" checked onClick="swapCollaboration(this)">';
+			$output .= 'Fanout <input type="radio" name="coupling" value="fanin" onClick="swapCollaboration(this)">';
+			$output .= 'Fanin <input type="button" id="legendBtn" value="Colours" onclick="displayLegend()" />';
+			$output .= '<div id="direct" class="legend" onclick="displayLegend()">Direct</div>';
+			$output .= '<div id="interface" class="legend" onclick="displayLegend()">Interface</div>';
+			$output .= '<div id="local" class="legend" onclick="displayLegend()"> Local	Inheritance</div>';
+			$output .= '<div id="foreign" class="legend" onclick="displayLegend()">Foreign Inheritance</div>';
+			$output .= '<div id="main"></div>';
+			$output .= '</section>';
+			return array('#markup' => $output);
+		 break;
+	 }
+ } 
+ 
+ 
+ 
+ /**
+ * Implement hook_form()
+ * @see coupling_viz_dynamic menu
+ */ 
+ 
+ function couplingviz_dynamic_form($form, &$form_state) {
+	$form['room_type'] = array(
+		 '#type' => 'radios',
+		 '#options' => drupal_map_assoc(array(t('Study Room'), t('Small Conference Room'),
+		t('Board Room'))),
+		 '#title' => t('What type of room do you require?')
+	);
+	
+	$form['study_room'] = array(
+		 '#type' => 'fieldset',
+		 '#title' => t('Study Room Details'),
+		 '#states' => array(
+			 'visible' => array(
+			 ':input[name="room_type"]' => array('value' => t('Study Room')),
+			 ),
+		 ),
+	);
+
+	$form['study_room']['equipment'] = array(
+		 '#type' => 'checkboxes',
+		 '#options' => drupal_map_assoc(array(t('Chairs'), t('PC'))),
+		 '#title' => t('What equipment do you need?'),
+		 '#states' => array(
+			'visible' => array( // action to take.
+				':input[name="room_type"]' => array('value' => t('Study Room')),
+			),
+		 ),
+	); 
+	return $form;
+ }	
+ 
+  /**
+ * Implement hook_form()
+ * @see coupling_viz_dynamic menu
+ */ 
+ 
+ function couplingviz_metric_form($form, &$form_state){
+	
+	$form['file_name'] = array(
+		'#name' => 'file_name',
+		'#type' => 'textfield',
+		'#title' => t('File Name'),
+		'#size' => 22,
+		'#prefix' => '<div class="poll-form"> File Name ',
+		'#suffix' => '</div>',
+		'#theme_wrappers' => array(),
+		'#weight' => -20,
+	);
+	
+	$form['fanin'] = array(
+		'#name' => 'TheFile',
+		'#type' => 'file',
+		'#title' => t('Choose a file'),
+		'#title_display' => 'invisible',
+		'#size' => 22,
+		'#prefix' => '<div class="poll-form">',
+		'#suffix' => '</div>', 
+		'#theme_wrappers' => array(),
+		'#weight' => -10,
+	);
+	
+	$form['display_btn'] = array(
+		'#type' => 'item',
+		'#markup' => '<div name="refresh" id="generate-btn" value="refresh" style="float: left;
+																			padding: 5px 15px;
+																			margin: 14px 10px; 
+																			border-radius: 15px;
+																			cursor: pointer;
+																			background: #ccc;"> Display Visual Represntation </div>',
+	);
+	
+	$form['submit_btn'] = array(
+		'#type' => 'submit',
+		'#value'=> 'submit',
+		'#title' => t('From'),
+		'#ajax' => array(
+			 'callback' => 'ex_form_ajax_handler',
+			 'effect' => 'fade',
+		   ),
+	);
+	
+	$form['uid'] = array('#type' => 'hidden');
+	
+	$vizTrigger_js_path = isset($info['preview_js']) ? $path . $info['preview_js'] : drupal_get_path('module', 'couplingviz') . '/' . 'vizTrigger.js';
+	$couplingviz_js_path = isset($info['preview_js']) ? $path . $info['preview_js'] : drupal_get_path('module', 'couplingviz') . '/' . 'couplingviz.js';
+	drupal_add_js('https://code.jquery.com/jquery-1.12.4.min.js', array('weight' => 100));
+	drupal_add_js('//d3js.org/d3.v3.min.js', array('weight' => 150));
+	drupal_add_js($vizTrigger_js_path, array('weight' => 100));
+	drupal_add_js($couplingviz_js_path, array('weight' => 200));
+	return $form;
+ } 
+ 
+  /**
+  * Call back function for savejsoncoupling menu routine
+  */
+  function save_json_coupling(){
+	if(! empty( $_POST['Fanout'] )){
+		$fanoutData = $_POST['Fanout'] ;
+		echo 'This is Fanout Data = ' . $fanoutData. '! ';
+		
+		$nid = db_insert('jsonviz')
+		 ->fields(array(
+		 'uid' => '6',
+		 'fid' => 1,
+		 'fname' => 'filenametest',
+		 'jvfile' => $fanoutData ,
+		 ))
+		->execute(); 
+	}
+	
+	if(! empty( $_POST['Fanin'] )){
+		$faninData = $_POST['Fanin'] ;
+		echo 'This is Fanin Data = ' . $faninData . '! ';
+	}
+ }
