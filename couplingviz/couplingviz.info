@@ -1,8 +1,9 @@
 name = couplingviz
-description = "This mdule is use to manage Coupling Viz drupal components"
+description = "This module is use to manage Coupling Viz drupal components"
 package = Pro Drupal Development 
 core = 7.x
 files[] = couplingviz.install
 files[] = couplingviz.module
 files[] = couplingviz.admin.inc
-configure = admin/config/content/annotate/settings
+files[] = tests/couplingviz.test
+scripts[] = couplingjs.js

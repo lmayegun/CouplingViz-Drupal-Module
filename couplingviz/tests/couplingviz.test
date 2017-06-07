@@ -1,0 +1,94 @@
+<?php 
+ /**
+ * @file
+ * Tests for CouplingViz module
+ */
+ 
+ class CouplingVizTests extends DrupalWebTestCase {
+	  
+	  /**
+	   * Metadat about Coupling Viz Test Case
+	   */
+	  public static function getInfo(){
+		  return array(
+			'name' => 'Coupling Viz',
+			'description' => 'Tests for CouplingViz Module',
+			'group' => 'Cuopling Viz Group',
+			);
+	  }
+	  
+	  /**
+	   * Perform any setup tasks for our test case
+	   */
+	  public function setUp(){
+		  parent::setUp(array('couplingviz'));
+	  }
+	  
+	  public function testLoginForm(){
+		  
+		  $this->drupalGet('index.php');
+		  
+		  $this->assertFieldById('edit-name',
+								 '', 
+								 'Login Form Asked for Username'
+								 );
+								 
+		  $this->assertFieldById('edit-pass',
+								 '', 
+								 'Login Form Asked for Password'
+								 );
+								 
+		  $this->assertRaw('href="/drupal/user/register"',
+							'Submit Button Succesfully Link to couplinghomepage'
+							);
+							
+		  $this->assertRaw('action="/drupal/node?destination=couplinghome"',
+						   'Submit Button Succesfully Link to couplinghomepage'
+						   );
+	  }
+	  
+	  public function testCouplingGenerator(){
+		  
+		  $this->drupalGet('couplinghome');
+		  
+		  $this->assertText('Coupling Viz Dynamic Form',
+							'Coupling Generator Title shows'
+							);
+							
+		  $this->assertFieldById('edit-viz-filename',
+								 '', 
+								 'The page provide username field'
+								 );
+		  
+		  $this->assertFieldById('edit-fanin',
+								 '', 
+								 'The page provide upload field'
+								 );
+		  
+		  $this->assertRaw('<div name="refresh" id="generate-btn" value="refresh"> Generate CBO </div>',
+							'The page provides button to submit and generate CBO'
+							);
+		  
+	  }
+	  
+	  public function testFileRepository(){
+		  
+		  $this->drupalGet('admin/structure/block/manage/couplingviz/viz_repo/configure');
+		  
+		  $this->assertFieldById('edit-title',
+								 'File Repository', 
+								 'The page provide upload field'
+								 );
+		  
+		  $this->assertText('File Repository',
+							'File Repository Title shows'
+							);
+			
+		  $this->assertRaw('href="/drupal/couplingdata/',
+							'link to CBO database available'
+							);
+	   }
+	 
+ }
+ 
+ 

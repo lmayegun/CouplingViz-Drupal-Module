@@ -72,77 +72,72 @@ jQuery.fn.upload = function(remote, data, successFn, progressFn) {
 };
  jQuery(document).ready(function () {
 	 
+	var modulePath = Drupal.settings.couplingviz.modulePath;
+	var basePath = Drupal.settings.couplingviz.basePath; 
+	var couplingRest = Drupal.settings.couplingviz.vizRestServer
+	 
 	jQuery("#generate-btn").bind("click", function(){
 		
-		jQuery("#edit-fanin").upload('http://localhost:8080/CouplingVizRestApi/rjsonfanout', 
+		jQuery("#edit-fanin").upload(couplingRest+'/CouplingVizRestApi/rjsonfanout', 
 			function(success){
-				alert("edit-fanout start");
+				//alert("edit-fanout start");
 				var j = success;
 				JSON.stringify(j);
 				console.log(j);
 				document.getElementById("fanout").innerHTML=JSON.stringify(j);
-				alert("edit-fanout end");
+				//alert("edit-fanout end");
 			});
 		
-		jQuery("#edit-fanin").upload('http://localhost:8080/CouplingVizRestApi/rjsonfanin', 
+		jQuery("#edit-fanin").upload(couplingRest+'/CouplingVizRestApi/rjsonfanin', 
 			function(success){
-				alert("edit-fanin start");
+				//alert("edit-fanin start");
 				var j = success;
 				JSON.stringify(j);
 				console.log(j);
 				document.getElementById("fanin").innerHTML=JSON.stringify(j);
-				alert("edit-fanin end");
+				//alert("edit-fanin end");
 			});		
 	});
 	
 	document.getElementById("generate-btn").addEventListener("click", loadDoc);
 	
 	function loadDoc(){
-		alert("loadDoc start");
-		var url = "sites/all/modules/custom/couplingviz/couplingviz.js";
+		//alert("loadDoc start");
+		var url = basePath + modulePath +"/couplingviz.js";
 		jQuery.getScript( url, function() {
-		  jQuery( "#refresh" ).click(function() {
+		  jQuery( "#generate-btn" ).click(function() {
 			document.getElementById("main").innerHTML="";	
 			document.getElementById("fanin").innrHTML="";
 			document.getElementById("fanout").innrHTML="";
 		  });
 		});
-		alert("loadDoc end");
+		//alert("loadDoc end");
 		
 		var fanoutdivelement = jQuery("#fanout").text();
 		var fanindivelement = jQuery("#fanin").text();
+		var filename		= jQuery("#edit-viz-filename").val();
 		
+		vzdata	= {	'Fanout': fanoutdivelement,
+					'Fanin':fanindivelement, 
+					'filename': filename
+				  };
 
-		fanoutdata = {'Fanout': fanoutdivelement };
-		fanindata = {'Fanin': fanindivelement };
-
-		//data1 = jQuery(this).serialize() + "&" + jQuery.param(data1);
+		//fanoutdata = jQuery(this).serialize() + "&" + jQuery.param(fanoutdata);
 		
-		var fanoutSettings = {
+		var vzSettings = {
 		  "async": true,
 		  "crossDomain": true,
-		  "data": fanoutdata,
-		  "url": "http://localhost/drupal/savejsoncoupling",
+		  "data": vzdata,
+		  "url": basePath + "savejsoncoupling",
 		  "method": "POST",
 		}
 		
-		var faninSettings = {
-		  "async": true,
-		  "crossDomain": true,
-		  "data": fanindata,
-		  "url": "http://localhost/drupal/savejsoncoupling",
-		  "method": "POST",
-		}
-		
-		jQuery.ajax(fanoutSettings).done(function (response) {
+		jQuery.ajax(vzSettings).done(function (response) {
 		  console.log(response);
 		  alert(response);
 		});
 		
-		jQuery.ajax(faninSettings).done(function (response) {
-		  console.log(response);
-		  alert(response);
-		});
 	};
  }
  );
+ console.log(Drupal.settings);

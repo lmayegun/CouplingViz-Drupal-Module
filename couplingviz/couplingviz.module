@@ -1,11 +1,11 @@
 <?php 
 
 /**
- *@file
- *Integrate Coupling Viz Component to Drupal System 
+ * @file
+ * Integrate Coupling Viz Component to Drupal System 
  *
- *Add all necessary backend features to drupal system 
- *the cproposes component are 
+ * Add all necessary drupal functionalities for 
+ * CoupplingViz module
  * - user authentication
  * - user authorisation
  * - processing user queries
@@ -17,6 +17,8 @@
  * Implementation of hook_menu()
  **/
  function couplingviz_menu(){
+ 
+    
 	$items['admin/config/couplingviz'] = array (
 		'title' 		=> 'Coupling Viz Configuration', 
 		'description' 	=> 'Coupling Viz is a visual representation system - set configuration of module',
@@ -28,28 +30,87 @@
 		'file path' => drupal_get_path('module', 'system'),
 	);
 	
-	$items['coupling_viz_dynamic'] = array(
-		'title' => t('Coupling Viz Dynamic Form'),
+	// Register route for couplingviz admin settings
+	$items['admin/config/couplingviz/settings'] = array(
+		'title' => 'Coupling Viz setting',
+		'description' => 'Adjust Coupling Viz module option.', 
 		'page callback' => 'drupal_get_form',
-		'page arguments' => array('couplingviz_dynamic_form'),
-		'access callback' => TRUE,
-		'type' => MENU_NORMAL_ITEM
-	);  
+		'page arguments' => array('couplingviz_admin_settings'),
+		'access arguments' => array('administer site configuration'),
+		'type' =>  MENU_NORMAL_ITEM, 
+		'file' => 'couplingviz.admin.inc',
+	);
 	
+	// Register route for couplingviz main page
 	$items['couplinghome'] = array(
 		'title' => t('Coupling Viz Dynamic Form'),
 		'page callback' => 'drupal_get_form',
 		'page arguments' => array('couplingviz_metric_form'),
 		'access callback' => TRUE,
+		'type' => MENU_NORMAL_ITEM,
 	); 
+	
+	// Register route for storing fanin and fanout data
 	$items['savejsoncoupling'] = array(
 		'title' => t('Save data posted to route in database'),
 		'page callback' => 'save_json_coupling',
 		'access callback' => TRUE,
 	);
+	
+	// Register view for CBO data in JSONVIZ table
+	$items['couplingdata/%/view'] = array(
+		'title' => t('Repository File View'),
+		'page arguments' => array(1), 
+		'page callback' => 'view_saved_cbo',
+		'access callback' => TRUE,
+	);
+	
 	return $items;
  }
  
+ 
+ /**
+ * Use to view the CBO in JSONVIZ table
+ * Callback by 'couplingdata/%/view'
+ */
+ function view_saved_cbo( $name = NULL ){
+	$repoload_js_path = isset($info['preview_js']) ? $path . $info['preview_js'] : drupal_get_path('module', 'couplingviz') . '/' . 'repoload.js';
+	$couplingviz_css_path = isset($info['preview_js']) ? $path . $info['preview_js'] : drupal_get_path('module', 'couplingviz') . '/' . 'couplingviz.css';
+	drupal_add_js('https://code.jquery.com/jquery-1.12.4.min.js', array('weight' => 100));
+	drupal_add_js('//d3js.org/d3.v3.min.js', array('weight' => 150));
+	drupal_add_js($repoload_js_path, array('weight' => 100));
+	drupal_add_css($couplingviz_css_path, array('weight' => 100));
+	  
+	$result = db_query("SELECT fname, fanoutdata, fanindata FROM {jsonviz} WHERE fid = :fid ",
+																								array(
+																								 ':fid' => $name, 
+																								)); 
+	foreach ($result as $row) {
+		//echo $row->fname."<br/>";
+	} 
+
+	return t('@filename = is the CBO data file loaded. Click to View ->  
+			<div id="fanout" style="display:none;"> 
+				@fanoutdata
+			</div>
+			<div id="fanin" style="display:none;">
+				@fanindata
+			</div>
+			<div name="refresh" id="generate-btn" value="refresh"> 
+				Generate CBO 
+			</div>
+		', 
+		array('@filename' => $row->fname, 
+			'@fanoutdata' => $row->fanoutdata,
+			'@fanindata' => $row->fanindata
+		)
+	); 
+ }
+ 
+ 
+ /**
+ * Modify User Login Form Block
+ */
  function couplingviz_form_user_login_block_alter(&$form, &$form_state) {
 	$form['direction'] = array(
 		'#markup' => t('Please log-in or Register to access coupling viz'),
@@ -66,20 +127,20 @@
  }
 
  
- 
+  /**
+  * Modify User Login Form
+  */
   function couplingviz_form_user_login_alter(&$form, $form_state, $form_id) {
 	$form['direction'] = array(
 		'#markup' => t('Please log-in or Register to access coupling viz'),
 		'#weight' => -5
 	);
 	
-	/**
-	$form['room_type'] = array(
-		 '#type' => 'radios',
-		 '#options' => drupal_map_assoc(array(t('Study Room'), t('Small Conference Room'),
-		t('Board Room'))),
-		 '#title' => t('What type of room do you require?')
-	);**/
+	
+	$form['Occupation'] = array(
+		 '#type' => 'textfield',
+		 '#title' => t('Occupation'),
+	);
 	
 	array_unshift($form['#validate'], 'couplingviz_form_user_login_validate');
 	$form_state['redirect'] = 'node/1';
@@ -88,20 +149,23 @@
 	
   }
   
+  /**
+  * Login form validator
+  */
   function couplingviz_form_user_login_validate($form, $form_state){
-	
-	//watchdog("CouplingVizer",'!yeah coupling validate work');
-	 //if ($form_state['values']['room_type'] == 'Study Room') {
+	watchdog("CouplingVizer",'!yeah coupling validate work');
+	if (!is_string($form_state['values']['occupation'])) {
 		 // We notify the form API that this field has failed validation.
-		//form_set_error('name', t('We are sorry but u cant chose a %value at the moment', array('%value' => $form_state['values']['room_type'])));
-	 //} 
+		form_set_error('name', t('We are sorry but u cant chose a %value at the moment', array('%value' => $form_state['values']['room_type'])));
+	} 
   }
   
   
-  /**
+ /**
  * Implements hook_block_info().
  */ 
   function couplingviz_block_info(){
+    
 	$blocks['viz_repo'] = array(
 		 'info' => t('Coupling Viz json file repositry'),
 		 'status' => TRUE,
@@ -109,6 +173,7 @@
 		 'weight' => 0,
 		 'visibility' => 1, 
 	);
+	
 	$blocks['viz_diplay'] = array(
 		 'info' => t('CouplingViz visual representation display'),
 		 'status' => TRUE,
@@ -145,10 +210,10 @@
  
  /**
  * Implements hook_block_save().
+ * Save setting of couplingviz block 
  */
  function couplingviz_block_save($delta = '', $edit = array()) {
 	 switch($delta) {
-	 
 		case 'viz_repo':
 			variable_set('file_num_count', (int)$edit['file_num_count']);
 		break;
@@ -161,12 +226,16 @@
  */
  function couplingviz_block_view($delta = '') {
 	switch ($delta) {
+	     // Block for displaying file repository by users
+		 // couplingviz_block_contents hold the HTML elements that display file repository
 		 case 'viz_repo':
 			 $block['subject'] = t('Repository Files');
 			 $block['content'] = couplingviz_block_contents($delta);
 			 return $block;
 		 break;
 		 
+		 // Block for displaying visual patterns of CBO
+		 // couplingviz_block_contents hold the HTML elements that display visual pattern
 		 case 'viz_diplay':
 			$block['subject'] = t('Visual Represntation');
 			$block['content'] = couplingviz_block_contents($delta);
@@ -181,90 +250,71 @@
  function couplingviz_block_contents($delta) {
 	 switch ($delta) {
 		 case 'viz_repo':
-			 if (user_access('administer comments')) {
-				 $nbr_comments = variable_get('file_num_count');
-				 $result = db_query("SELECT cid, subject FROM {comment} WHERE status = 1 limit $nbr_comments");
+			// if (user_access('administer comments')) {
+				 global $user;
+				 $file_counts = variable_get('file_num_count');
+				 $result = db_query("SELECT fname, fid FROM {jsonviz} WHERE uid = $user->uid limit $file_counts");
 				
 				 $items = array();
 				 
 				 foreach ($result as $row) {
-					$items[] = l($row->subject, 'comment/' . $row->cid . '/edit');
+					$items[] = l($row->fname, 'couplingdata/' . $row->fid . '/view');
 				 }
 			return array('#markup' => theme('item_list', array('items' => $items)));
-			}
+			//}
 		 break;
+		 
 		 case 'viz_diplay':
 			$output = '';
 			$output .= ' <div id="fanin" style="display:none;"> </div>';
 			$output .= ' <div id="fanout" style="display:none;"> </div>';
 			$output .= '<section id="maincontainer">';
-			$output .= '<label for="scaling"> Scale</label> <select id="scaling" onchange="scaleNodes(this.value);">';
+			
+			$output .= '<div class="vizlabels"> <label for="scaling"> Scale</label> <select id="scaling" onchange="scaleNodes(this.value);">';
 			$output .= '<option value="0">0</option>';
 			$output .= '<option value="1">1</option>';
 			$output .= '<option value="2">2</option>';
-			$output .= '<option value="3">3</option>';
-			$output .= '</select> <label for="links">Links</label> <input type="checkbox" id="links" onclick="displayLines(this);" checked /> <label for="packages">Packages</label>';
-			$output .= '<input type="checkbox" id="packages" onclick="displayPackageBg(this);" checked />';
-			$output .= '<input type="radio" name="coupling" value="fanout" checked onClick="swapCollaboration(this)">';
-			$output .= 'Fanout <input type="radio" name="coupling" value="fanin" onClick="swapCollaboration(this)">';
-			$output .= 'Fanin <input type="button" id="legendBtn" value="Colours" onclick="displayLegend()" />';
-			$output .= '<div id="direct" class="legend" onclick="displayLegend()">Direct</div>';
+			$output .= '<option value="3">3</option></select> </div>';
+			
+			$output .= '<div class="vizlabels"> <label for="links">Links</label> <input type="checkbox" id="links" onclick="displayLines(this);" checked /></div>';
+			
+			$output .= '<div class="vizlabels"> <label for="packages">Packages</label><input type="checkbox" id="packages" onclick="displayPackageBg(this);" checked /> </div>';
+			
+			$output .= '<div class="vizlabels"><label> Toggle View </label>';
+			$output .= '<input type="radio" name="coupling" value="fanout" checked onClick="swapCollaboration(this)"> Fanout';
+			$output .= '<input type="radio" name="coupling" value="fanin" onClick="swapCollaboration(this)"> Fanin</div>';
+			
+			$output .= '<div class="vizlabels" style= "width:250px;">';
+			//$output .= '<input type="button" id="legendBtn" value="Colours" onclick="displayLegend()" />';
+			$output .= '<div id="foreign" class="legend" onclick="displayLegend()">Foreign Inheritance</div>';
 			$output .= '<div id="interface" class="legend" onclick="displayLegend()">Interface</div>';
 			$output .= '<div id="local" class="legend" onclick="displayLegend()"> Local	Inheritance</div>';
-			$output .= '<div id="foreign" class="legend" onclick="displayLegend()">Foreign Inheritance</div>';
-			$output .= '<div id="main"></div>';
+			$output .= '<div id="direct" class="legend" onclick="displayLegend()">Direct</div>';
+			$output .= '</div>';
+			
+			$output .= '<div id="main" style="width:150%; float:left; position: relative; margin-top:20px;"></div>';
+			
 			$output .= '</section>';
 			return array('#markup' => $output);
 		 break;
+		 
+		 
 	 }
  } 
  
  
- 
- /**
- * Implement hook_form()
- * @see coupling_viz_dynamic menu
- */ 
- 
- function couplingviz_dynamic_form($form, &$form_state) {
-	$form['room_type'] = array(
-		 '#type' => 'radios',
-		 '#options' => drupal_map_assoc(array(t('Study Room'), t('Small Conference Room'),
-		t('Board Room'))),
-		 '#title' => t('What type of room do you require?')
-	);
-	
-	$form['study_room'] = array(
-		 '#type' => 'fieldset',
-		 '#title' => t('Study Room Details'),
-		 '#states' => array(
-			 'visible' => array(
-			 ':input[name="room_type"]' => array('value' => t('Study Room')),
-			 ),
-		 ),
-	);
-
-	$form['study_room']['equipment'] = array(
-		 '#type' => 'checkboxes',
-		 '#options' => drupal_map_assoc(array(t('Chairs'), t('PC'))),
-		 '#title' => t('What equipment do you need?'),
-		 '#states' => array(
-			'visible' => array( // action to take.
-				':input[name="room_type"]' => array('value' => t('Study Room')),
-			),
-		 ),
-	); 
-	return $form;
- }	
- 
   /**
  * Implement hook_form()
+ * Responsible for creating initial CBO data
+ * by sending request to CouplingViz Rest 
+ * Using ajax.
+ * Output form that accept user java zip file input
  * @see coupling_viz_dynamic menu
  */ 
  
  function couplingviz_metric_form($form, &$form_state){
 	
-	$form['file_name'] = array(
+	$form['viz_filename'] = array(
 		'#name' => 'file_name',
 		'#type' => 'textfield',
 		'#title' => t('File Name'),
@@ -281,7 +331,7 @@
 		'#title' => t('Choose a file'),
 		'#title_display' => 'invisible',
 		'#size' => 22,
-		'#prefix' => '<div class="poll-form">',
+		'#prefix' => '<div class="poll-form"> Upload Form',
 		'#suffix' => '</div>', 
 		'#theme_wrappers' => array(),
 		'#weight' => -10,
@@ -289,49 +339,57 @@
 	
 	$form['display_btn'] = array(
 		'#type' => 'item',
-		'#markup' => '<div name="refresh" id="generate-btn" value="refresh" style="float: left;
-																			padding: 5px 15px;
-																			margin: 14px 10px; 
-																			border-radius: 15px;
-																			cursor: pointer;
-																			background: #ccc;"> Display Visual Represntation </div>',
-	);
-	
-	$form['submit_btn'] = array(
-		'#type' => 'submit',
-		'#value'=> 'submit',
-		'#title' => t('From'),
-		'#ajax' => array(
-			 'callback' => 'ex_form_ajax_handler',
-			 'effect' => 'fade',
-		   ),
+		'#markup' => '<div name="refresh" id="generate-btn" value="refresh"> Generate CBO </div>',
 	);
 	
 	$form['uid'] = array('#type' => 'hidden');
 	
-	$vizTrigger_js_path = isset($info['preview_js']) ? $path . $info['preview_js'] : drupal_get_path('module', 'couplingviz') . '/' . 'vizTrigger.js';
+	global $base_path;
+    global $base_url;
+
+     $my_base_path = $GLOBALS['base_url'] . $GLOBALS['base_path'];
+    // or $my_base_path = $base_url . $base_path;
+
+
+       $my_settings = array(
+         'basePath' => $base_path,
+         'animationEffect' => variable_get('effect', 'none')
+       );
+	 drupal_add_js(array('couplingviz' => array('key' => 'value')), 'setting');
+	
+	$vizTrigger_js_path = isset($info['preview_js']) ? $path . $info['preview_js'] : drupal_get_path('module', 'couplingviz') . '/' . 'viztrigger.js';
 	$couplingviz_js_path = isset($info['preview_js']) ? $path . $info['preview_js'] : drupal_get_path('module', 'couplingviz') . '/' . 'couplingviz.js';
+	$couplingviz_css_path = isset($info['preview_js']) ? $path . $info['preview_js'] : drupal_get_path('module', 'couplingviz') . '/' . 'couplingviz.css';
 	drupal_add_js('https://code.jquery.com/jquery-1.12.4.min.js', array('weight' => 100));
+
 	drupal_add_js('//d3js.org/d3.v3.min.js', array('weight' => 150));
 	drupal_add_js($vizTrigger_js_path, array('weight' => 100));
 	drupal_add_js($couplingviz_js_path, array('weight' => 200));
+	drupal_add_css($couplingviz_css_path, array('weight' => 100));
 	return $form;
  } 
  
   /**
   * Call back function for savejsoncoupling menu routine
+  * Responsible for inserting data into JSON table 
   */
   function save_json_coupling(){
 	if(! empty( $_POST['Fanout'] )){
+		global $user;
 		$fanoutData = $_POST['Fanout'] ;
-		echo 'This is Fanout Data = ' . $fanoutData. '! ';
+		$fileName 	= $_POST['filename'];
+		$faninData 	= $_POST['Fanin'] ;
+		$output 	= 'This is File Name = ' . $fileName . '';
+		$output		.= 'This is Fanout Data = ' . $fanoutData . '';
+		$output 	.= 'This is Fanin Data = ' . $faninData . '';
+		echo $output ;
 		
 		$nid = db_insert('jsonviz')
 		 ->fields(array(
-		 'uid' => '6',
-		 'fid' => 1,
-		 'fname' => 'filenametest',
-		 'jvfile' => $fanoutData ,
+		 'uid' => $user->uid,
+		 'fname' => $fileName,
+		 'fanoutdata' => $fanoutData ,
+		 'fanindata' => $faninData ,
 		 ))
 		->execute(); 
 	}
@@ -340,4 +398,33 @@
 		$faninData = $_POST['Fanin'] ;
 		echo 'This is Fanin Data = ' . $faninData . '! ';
 	}
+ }
+ 
+ /**
+ * Implement hook_init()
+ * Pass required global variable to javascript
+ * Helps module installation process
+ */
+ function couplingviz_init(){
+
+		global $base_path;
+		global $base_url;
+
+		$my_base_path = $GLOBALS['base_url'] . $GLOBALS['base_path'];
+		// or $my_base_path = $base_url . $base_path;
+
+		$module_path = drupal_get_path('module', 'couplingviz');
+		
+		$server = 'http://'. $_SERVER['SERVER_NAME'];
+		
+		$viz_rest_server = variable_get('rest_viz_server_name', 'none');
+
+		$my_settings = array(
+			'basePath' => $base_path,
+			'serverName' => $server,
+			'modulePath' => $module_path,
+			'vizRestServer' => $viz_rest_server,
+		);
+
+      drupal_add_js(array('couplingviz' => $my_settings), 'setting');
  }

@@ -1,8 +1,8 @@
 /**
-* 
+* Reponsible for output visual patterns of CBO.
 */
 
-	var width =  600;   
+	var width =  800;   
 		height = 600;  
 	var color = d3.scale.category20();
 
@@ -232,7 +232,7 @@
 	 * create canvas for drawing components of visualization.
 	 */
 	var canvas = d3.select('#main').append('svg')
-		.attr("viewBox", "100,100,900,400");
+		.attr("viewBox", "100,100,720,900");
 	 
 	var clsG = canvas.append("g");
 
